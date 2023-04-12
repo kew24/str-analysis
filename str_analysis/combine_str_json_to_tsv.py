@@ -261,7 +261,6 @@ def compute_variant_summary_string(variant_record):
 
     Args:
         variant_record (dict): list of 1 or more allele spec dictionaries
-        het_or_hom (str): describes the genotype as "HET" or "HOM"
     Return:
         str: short summary of the variant
     """
@@ -281,21 +280,21 @@ def compute_variant_summary_string(variant_record):
         het_or_hom = "HET"
         allele_numbers = [1, 2]
 
-    ins_or_del = []
+    ins_or_del_or_ref = []
     for i in allele_numbers:
         allele_size = int(variant_record[f"Repeat Size (bp): Allele {i}"])
         if allele_size == reference_locus_size:
-            ins_or_del.append("REF")
+            ins_or_del_or_ref.append("REF")
         elif allele_size > reference_locus_size:
-            ins_or_del.append("INS")
+            ins_or_del_or_ref.append("INS")
         elif allele_size < reference_locus_size:
-            ins_or_del.append("DEL")
+            ins_or_del_or_ref.append("DEL")
 
     summary_string = str(num_repeats_ref) + "=>" + variant_record["Genotype"]
     summary_string += "[" + variant_record["GenotypeConfidenceInterval"] + "]"
     summary_string += ":" + f"{repeat_unit}[{len(repeat_unit)}bp]"
     summary_string += ":" + het_or_hom
-    summary_string += ":" + ",".join(ins_or_del)
+    summary_string += ":" + ",".join(ins_or_del_or_ref)
 
     return summary_string
 
@@ -481,9 +480,14 @@ def convert_expansion_hunter_json_to_tsv_columns(
                 if include_extra_expansion_hunter_fields:
                     is_homozygous = len(genotype_tuples) > 1 and genotype_tuples[0][0] == genotype_tuples[1][0]
                     divisor = 2 if is_homozygous else 1
-                    output_record[f"NumSpanningReadsThatSupportGenotype{suffix}"] = sum(t[1] for t in spanning_read_tuples if t[0] == int(genotype)) / divisor
-                    output_record[f"NumFlankingReadsThatSupportGenotype{suffix}"] = sum(t[1] for t in flanking_read_tuples if t[0] == int(genotype)) / divisor
-                    output_record[f"NumInrepeatReadsThatSupportGenotype{suffix}"] = sum(t[1] for t in inrepeat_read_tuples if t[0] == int(genotype)) / divisor
+                    read_length = locus_record.get("ReadLength", 150)
+                    ru_length = variant_record["RepeatUnitLength"]
+                    for label, read_tuples in [("Spanning", spanning_read_tuples), ("Flanking", flanking_read_tuples), ("Inrepeat", inrepeat_read_tuples)]:
+                        output_record[f"Num{label}ReadsThatSupportGenotype{suffix}"] = sum(
+                            t[1] for t in read_tuples
+                            if (t[0] == int(genotype)) or (int(genotype) > t[0] and t[0]*ru_length > 0.8*read_length)
+                        ) / divisor
+
                     output_record[f"NumReadsTotalThatSupportGenotype{suffix}"] = (
                         output_record[f"NumSpanningReadsThatSupportGenotype{suffix}"] +
                         output_record[f"NumFlankingReadsThatSupportGenotype{suffix}"] +
@@ -492,6 +496,10 @@ def convert_expansion_hunter_json_to_tsv_columns(
                     output_record[f"FractionOfReadsThatSupportsGenotype{suffix}"] = (
                         output_record[f"NumReadsTotalThatSupportGenotype{suffix}"] / float(output_record["NumReadsTotal"]) if int(output_record["NumReadsTotal"]) > 0 else 0
                     )
+
+                    # ExpansionHunter Q score based on EnsemblTR https://github.com/gymrek-lab/EnsembleTR/blob/main/ensembletr/utils.py#L53-L59
+                    output_record[f"Q{suffix}"] = 1/np.exp(4*output_record[f"CI ratio{suffix}"])
+
                 if include_extra_gangstr_fields:
                     # ex. "2,10|3,7|4,14"
                     for source_field, dest_field in [("ENCLREADS", f"NumSpanningReadsThatSupportGenotype{suffix}"),

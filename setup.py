@@ -7,11 +7,13 @@ from setuptools.command.build_py import build_py
 with open("README.md", "rt") as fh:
     long_description = fh.read()
 
+with open("requirements.txt", "rt") as f:
+    requirements = [r.strip() for r in f.readlines()]
+
+
 class CoverageCommand(build_py):
     """Run all unittests and generate a coverage report."""
-
     def run(self):
-        """Run the coverage command"""
         os.system("python3 -m coverage run --omit='*/site-packages/*,*tests.py,setup.py,*__init__.py' ./setup.py test "
                   "&& python3 -m coverage html --include=*.py "
                   "&& open htmlcov/index.html")
@@ -20,15 +22,10 @@ class CoverageCommand(build_py):
 class PublishCommand(build_py):
     """Publish package to PyPI"""
     def run(self):
-        """Publish"""
         os.system("rm -rf dist")
         os.system("python3 setup.py sdist"
                   "&& python3 setup.py bdist_wheel"
-                  "&& twine upload dist/*whl dist/*gz")
-
-
-with open("requirements.txt", "rt") as f:
-    requirements = [r.strip() for r in f.readlines()]
+                  "&& python3 -m twine upload dist/*whl dist/*gz")
 
 
 def test_suite():
@@ -40,8 +37,8 @@ def test_suite():
 
 setup(
     name='str_analysis',
-    version="0.9.17",
-    description="Utilities  short tandem repeats (STRs)",
+    version="0.9.21",
+    description="Utilities for analyzing short tandem repeats (STRs)",
     install_requires=requirements,
     cmdclass={
         'coverage': CoverageCommand,
